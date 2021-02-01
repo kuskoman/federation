@@ -1,38 +1,34 @@
+import gql from 'graphql-tag';
 import { Logger } from 'apollo-server-types';
 import { ApolloGateway } from '../..';
 import {
   mockSDLQuerySuccess,
-  mockStorageSecretSuccess,
-  mockCompositionConfigLinkSuccess,
-  mockCompositionConfigsSuccess,
-  mockImplementingServicesSuccess,
-  mockRawPartialSchemaSuccess,
+  mockCsdlRequest,
   apiKeyHash,
   graphId,
+  apiKey,
+  graphVariant,
 } from './nockMocks';
 import { getTestingCsdl } from '../execution-utils';
 import { MockService } from './networkRequests.test';
-import { parse } from 'graphql';
 
 let logger: Logger;
 
 const service: MockService = {
-  gcsDefinitionPath: 'service-definition.json',
-  partialSchemaPath: 'accounts-partial-schema.json',
   url: 'http://localhost:4001',
-  sdl: `#graphql
-      extend type Query {
-        me: User
-        everyone: [User]
-      }
+  typeDefs: gql`
+    extend type Query {
+      me: User
+      everyone: [User]
+    }
 
-      "This is my User"
-      type User @key(fields: "id") {
-        id: ID!
-        name: String
-        username: String
-      }
-    `,
+    "This is my User"
+    type User @key(fields: "id") {
+      id: ID!
+      name: String
+      username: String
+    }
+  `,
 };
 
 beforeEach(() => {
@@ -75,7 +71,7 @@ describe('gateway configuration warnings', () => {
     });
 
     await gateway.load({
-      apollo: { keyHash: apiKeyHash, graphId, graphVariant: 'current' },
+      apollo: { key: apiKey, keyHash: apiKeyHash, graphId, graphVariant },
     });
 
     expect(logger.warn).toHaveBeenCalledWith(
@@ -86,18 +82,14 @@ describe('gateway configuration warnings', () => {
   });
 
   it('conflicting configurations are not warned about when absent', async () => {
-    mockStorageSecretSuccess();
-    mockCompositionConfigLinkSuccess();
-    mockCompositionConfigsSuccess([service]);
-    mockImplementingServicesSuccess(service);
-    mockRawPartialSchemaSuccess(service);
+    mockCsdlRequest();
 
     const gateway = new ApolloGateway({
       logger,
     });
 
     await gateway.load({
-      apollo: { keyHash: apiKeyHash, graphId, graphVariant: 'current' },
+      apollo: { key: apiKey, keyHash: apiKeyHash, graphId, graphVariant },
     });
 
     expect(logger.warn).not.toHaveBeenCalledWith(
@@ -120,7 +112,7 @@ describe('gateway configuration warnings', () => {
 
 describe('gateway startup errors', () => {
   it("throws when static config can't be composed", async () => {
-    const uncomposableSdl = parse(`#graphql
+    const uncomposableSdl = gql`
       type Query {
         me: User
         everyone: [User]
@@ -136,7 +128,7 @@ describe('gateway startup errors', () => {
         name: String
         username: String
       }
-    `);
+    `;
 
     const gateway = new ApolloGateway({
       localServiceList: [

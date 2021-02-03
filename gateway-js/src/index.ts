@@ -75,8 +75,6 @@ type DataSourceMap = {
   [serviceName: string]: { url?: string; dataSource: GraphQLDataSource };
 };
 
-type Await<T> = T extends Promise<infer U> ? U : T;
-
 // Local state to track whether particular UX-improving warning messages have
 // already been emitted.  This is particularly useful to prevent recurring
 // warnings of the same type in, e.g. repeating timers, which don't provide
@@ -120,6 +118,9 @@ export class ApolloGateway implements GraphQLService {
   private parsedCsdl?: DocumentNode;
   private fetcher: typeof fetch;
   private compositionId?: string;
+  private stopped: boolean = false;
+  private stoppedPromise: Promise<void>;
+  private resolveStoppedPromise: Function;
 
   // Observe query plan, service info, and operation info prior to execution.
   // The information made available here will give insight into the resulting
@@ -139,6 +140,12 @@ export class ApolloGateway implements GraphQLService {
   protected experimental_pollInterval?: number;
 
   constructor(config?: GatewayConfig) {
+    let resolve: Function;
+    this.stoppedPromise = new Promise<void>((res) => (resolve = res));
+    this.resolveStoppedPromise = () => {
+      resolve();
+    };
+
     this.config = {
       // TODO: expose the query plan in a more flexible JSON format in the future
       // and remove this config option in favor of `exposeQueryPlan`. Playground
@@ -235,6 +242,14 @@ export class ApolloGateway implements GraphQLService {
     apollo?: ApolloConfig;
     engine?: GraphQLServiceEngineConfig;
   }) {
+    // Was the gateway previously stopped? If so reset the stopping mechanisms.
+    if (this.stopped) {
+      this.stopped = false;
+      this.stoppedPromise = new Promise(
+        (res) => (this.resolveStoppedPromise = res),
+      );
+    }
+
     if (options?.apollo) {
       this.apolloConfig = options.apollo;
     } else if (options?.engine) {
@@ -285,6 +300,7 @@ export class ApolloGateway implements GraphQLService {
   // Asynchronously load a dynamically configured schema. `this.updateComposition`
   // is responsible for updating the class instance's schema and query planner.
   private async loadDynamic() {
+    // This may throw, but it's expected on initial load to do so
     await this.updateComposition();
     if (this.shouldBeginPolling()) {
       this.pollServices();
@@ -294,22 +310,16 @@ export class ApolloGateway implements GraphQLService {
   private shouldBeginPolling() {
     return (
       (isManagedConfig(this.config) || this.experimental_pollInterval) &&
-      !this.pollingTimer
+      !this.pollingTimer &&
+      !this.stopped
     );
   }
 
   protected async updateComposition(): Promise<void> {
-    let result: Await<UpdateReturnType>;
-    this.logger.debug('Checking service definitions...');
-    try {
-      result = await this.updateServiceDefinitions(this.config);
-    } catch (e) {
-      this.logger.error(
-        'Error checking for changes to service definitions: ' +
-          ((e && e.message) || e),
-      );
-      throw e;
-    }
+    this.logger.debug('Checking for composition updates...');
+
+    // This may throw, but an error here is caught and logged upstream
+    const result = await this.updateServiceDefinitions(this.config);
 
     //TODO: proper predicates
     if ('csdl' in result) {
@@ -657,6 +667,13 @@ export class ApolloGateway implements GraphQLService {
       this.logger.error((err && err.message) || err);
     }
 
+    if (this.stopped) {
+      clearTimeout(this.pollingTimer!);
+      this.pollingTimer = undefined;
+      this.resolveStoppedPromise();
+      return;
+    }
+
     this.pollServices();
   }
 
@@ -904,11 +921,14 @@ export class ApolloGateway implements GraphQLService {
     return errors || [];
   }
 
-  public async stop() {
-    if (this.pollingTimer) {
-      clearTimeout(this.pollingTimer);
-      this.pollingTimer = undefined;
+  public stop() {
+    this.stopped = true;
+    if (!this.pollingTimer) {
+      // Already wasn't polling, so we just resolve the promise immediately
+      this.resolveStoppedPromise();
     }
+
+    return this.stoppedPromise;
   }
 }
 

@@ -9,11 +9,8 @@ import {
   mockAllServicesHealthCheckSuccess,
   mockServiceHealthCheck,
   mockCsdlRequestSuccess,
-  apiKey,
-  apiKeyHash,
-  graphId,
-  graphVariant,
   mockCsdlRequest,
+  mockApolloConfig,
 } from './nockMocks';
 import {
   accounts,
@@ -48,10 +45,6 @@ const simpleService: MockService = {
       username: String
     }
   `,
-};
-
-const loadConfig = {
-  apollo: { key: apiKey, keyHash: apiKeyHash, graphId, graphVariant },
 };
 
 function getRootQueryFields(schema?: GraphQLSchema): string[] {
@@ -102,7 +95,7 @@ it('Fetches CSDL from remote storage', async () => {
   // @ts-ignore for testing purposes, a short pollInterval is ideal so we'll override here
   gateway.experimental_pollInterval = 100;
 
-  await gateway.load(loadConfig);
+  await gateway.load(mockApolloConfig);
   await gateway.stop();
   expect(gateway.schema?.getType('User')).toBeTruthy();
 });
@@ -127,7 +120,7 @@ it('Updates CSDL from remote storage', async () => {
   gateway.experimental_pollInterval = 100;
   gateway.onSchemaChange(schemaChangeCallback);
 
-  await gateway.load(loadConfig);
+  await gateway.load(mockApolloConfig);
   expect(gateway['compositionId']).toMatchInlineSnapshot(`"originalId-1234"`);
 
   await secondUpdate;
@@ -144,7 +137,7 @@ describe('CSDL update failures', () => {
     });
 
     await expect(
-      gateway.load(loadConfig),
+      gateway.load(mockApolloConfig),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `"401: Unexpected failure while fetching updated CSDL"`,
     );
@@ -160,7 +153,7 @@ describe('CSDL update failures', () => {
     // @ts-ignore for testing purposes, a short pollInterval is ideal so we'll override here
     gateway.experimental_pollInterval = 100;
 
-    await gateway.load(loadConfig);
+    await gateway.load(mockApolloConfig);
     await gateway.stop();
 
     expect(logger.error).toHaveBeenCalledTimes(1);
@@ -187,7 +180,7 @@ describe('CSDL update failures', () => {
     // @ts-ignore for testing purposes, a short pollInterval is ideal so we'll override here
     gateway.experimental_pollInterval = 100;
 
-    await gateway.load(loadConfig);
+    await gateway.load(mockApolloConfig);
     await gateway.stop();
 
     expect(logger.error).toHaveBeenCalledTimes(1);
@@ -221,7 +214,7 @@ it('Rollsback to a previous schema when triggered', async () => {
   gateway.experimental_pollInterval = 100;
 
   gateway.onSchemaChange(onChange);
-  await gateway.load(loadConfig);
+  await gateway.load(mockApolloConfig);
 
   await firstSchemaChangeBlocker;
   expect(onChange).toHaveBeenCalledTimes(1);
@@ -279,7 +272,7 @@ describe('Downstream service health checks', () => {
       // @ts-ignore for testing purposes, a short pollInterval is ideal so we'll override here
       gateway.experimental_pollInterval = 100;
 
-      await gateway.load(loadConfig);
+      await gateway.load(mockApolloConfig);
       await gateway.stop();
 
       expect(gateway.schema!.getType('User')!).toBeTruthy();
@@ -297,7 +290,7 @@ describe('Downstream service health checks', () => {
       const gateway = new ApolloGateway({ serviceHealthCheck: true, logger });
 
       await expect(
-        gateway.load(loadConfig),
+        gateway.load(mockApolloConfig),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `"500: Internal Server Error"`,
       );
@@ -332,7 +325,7 @@ describe('Downstream service health checks', () => {
       gateway.experimental_pollInterval = 100;
 
       gateway.onSchemaChange(onChange);
-      await gateway.load(loadConfig);
+      await gateway.load(mockApolloConfig);
 
       // Basic testing schema doesn't contain a `review` field on `Query` type
       await schemaChangeBlocker1;
@@ -397,7 +390,7 @@ describe('Downstream service health checks', () => {
       gateway.updateComposition = mockUpdateComposition;
 
       // load the gateway as usual
-      await gateway.load(loadConfig);
+      await gateway.load(mockApolloConfig);
 
       // Validate we have the original schema
       expect(getRootQueryFields(gateway.schema)).toContain('topReviews');

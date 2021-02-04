@@ -4,10 +4,7 @@ import { ApolloGateway } from '../..';
 import {
   mockSDLQuerySuccess,
   mockCsdlRequestSuccess,
-  apiKeyHash,
-  graphId,
-  apiKey,
-  graphVariant,
+  mockApolloConfig,
 } from './nockMocks';
 import { getTestingCsdl } from '../execution-utils';
 import { MockService } from './networkRequests.test';
@@ -53,9 +50,7 @@ describe('gateway configuration warnings', () => {
       logger,
     });
 
-    await gateway.load({
-      apollo: { keyHash: apiKeyHash, graphId, graphVariant: 'current' },
-    });
+    await gateway.load(mockApolloConfig);
 
     expect(logger.warn).toHaveBeenCalledWith(
       'A local gateway configuration is overriding a managed federation configuration.' +
@@ -71,9 +66,7 @@ describe('gateway configuration warnings', () => {
       logger,
     });
 
-    await gateway.load({
-      apollo: { key: apiKey, keyHash: apiKeyHash, graphId, graphVariant },
-    });
+    await gateway.load(mockApolloConfig);
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringMatching(
@@ -89,9 +82,7 @@ describe('gateway configuration warnings', () => {
     // @ts-ignore for testing purposes, a short pollInterval is ideal so we'll override here
     gateway.experimental_pollInterval = 100;
 
-    await gateway.load({
-      apollo: { key: apiKey, keyHash: apiKeyHash, graphId, graphVariant },
-    });
+    await gateway.load(mockApolloConfig);
 
     await gateway.stop();
 
